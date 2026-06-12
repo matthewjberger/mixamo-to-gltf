@@ -30,8 +30,6 @@ Tweak the animation selection (`All` / `None` / per-clip) or the root-motion tog
 
 Conversion requires the desktop shell (`just run`); `just run-web` serves the viewer in a browser but has no native FBX pipeline behind it.
 
-Until the nightshade `fbx` feature ships on crates.io, the workspace patches `nightshade` to the sibling checkout (`../nightshade/crates/nightshade`) via `[patch.crates-io]`.
-
 ## License
 
 Dual-licensed under MIT or Apache-2.0, at your option.

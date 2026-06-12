@@ -3506,7 +3506,9 @@ checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
 
 [[package]]
 name = "nightshade"
-version = "0.37.0"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2edcceb0ceb922d3628a0004ac1f6438b692bf6e213da62268f89750178437d"
 dependencies = [
  "accesskit",
  "accesskit_winit",

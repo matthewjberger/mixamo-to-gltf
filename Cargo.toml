@@ -2,9 +2,6 @@
 members = ["convert", "desktop", "protocol", "worker"]
 resolver = "2"
 
-[patch.crates-io]
-nightshade = { path = "../nightshade/crates/nightshade" }
-
 [package]
 name = "page"
 version = "0.1.0"

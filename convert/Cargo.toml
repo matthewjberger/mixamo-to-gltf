@@ -5,7 +5,7 @@ license = "MIT OR Apache-2.0"
 edition = "2024"
 
 [dependencies]
-nightshade = { version = "0.37.0", features = ["fbx"] }
+nightshade = { version = "0.38.0", features = ["fbx"] }
 protocol = { path = "../protocol" }
 gltf-json = "1.4"
 zip = "2.2"

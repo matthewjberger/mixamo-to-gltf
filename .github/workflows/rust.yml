@@ -9,11 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The workspace patches nightshade to the sibling checkout until the
-      # fbx feature ships on crates.io.
-      - name: Clone nightshade next to the workspace
-        run: git clone --depth 1 https://github.com/matthewjberger/nightshade ../nightshade
-
       # Installs rust, wasm-bindgen, wasm-opt, and trunk as pinned in mise.toml.
       - uses: jdx/mise-action@v2
 
