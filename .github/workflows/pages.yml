@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+# Run the JavaScript actions on Node 24 (Node 20 is being retired).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs rust, wasm-bindgen, wasm-opt, and trunk as pinned in mise.toml.
+      - uses: jdx/mise-action@v2
+
+      # mise delegates rust to rustup, which does not pick up the target on a
+      # machine that already has rust, so add it explicitly.
+      - run: rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build and optimize the worker wasm
+        run: |
+          cargo build --release -p worker --target wasm32-unknown-unknown
+          wasm-bindgen --target web --out-dir runtime --out-name engine target/wasm32-unknown-unknown/release/worker.wasm
+          wasm-opt -O3 --enable-simd runtime/engine_bg.wasm -o runtime/engine_bg.wasm
+
+      - name: Build the Leptos bundle
+        run: trunk build --release --public-url /nightshade-template-leptos/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

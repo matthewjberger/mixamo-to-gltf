@@ -1,0 +1,19 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+
+[[bin]]
+name = "mixamo-to-gltf"
+path = "src/main.rs"
+
+[dependencies]
+convert = { path = "../convert" }
+protocol = { path = "../protocol" }
+rfd = "0.17"
+serde_json = "1"
+wry = "0.55"
+winit = "0.30"
+rust-embed = "8"
+tiny_http = "0.12"
