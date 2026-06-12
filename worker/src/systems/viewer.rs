@@ -19,6 +19,10 @@ pub fn load_glb(viewer_world: &mut ViewerWorld, world: &mut World, name: &str, b
         }
     };
 
+    let mesh_count = result.meshes.len() as u32;
+    let skin_count = result.skins.len() as u32;
+    let animation_count = result.animations.len() as u32;
+
     nightshade::ecs::loading::queue_gltf_load(world, &mut result);
 
     let animations = result.animations.clone();
@@ -59,9 +63,9 @@ pub fn load_glb(viewer_world: &mut ViewerWorld, world: &mut World, name: &str, b
     crate::post(&WorkerMessage::ModelLoaded {
         name: name.to_string(),
         clips,
-        mesh_count: result.meshes.len() as u32,
-        skin_count: result.skins.len() as u32,
-        animation_count: result.animations.len() as u32,
+        mesh_count,
+        skin_count,
+        animation_count,
     });
 }
 

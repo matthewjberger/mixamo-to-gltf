@@ -1,6 +1,7 @@
 use nightshade::ecs::animation::components::{
     AnimationClip, AnimationProperty, AnimationSamplerOutput,
 };
+use nightshade::ecs::material::components::Material;
 use nightshade::ecs::mesh::components::Mesh;
 use nightshade::ecs::prefab::{GltfSkin, Prefab, PrefabNode};
 use protocol::{BundleAnimation, BundleModel, BundleSummary};
@@ -384,7 +385,11 @@ fn build_glb_bytes(
         });
     }
 
-    for (texture_name, (rgba_data, width, height)) in &model.textures {
+    let mut texture_names: Vec<&String> = model.textures.keys().collect();
+    texture_names.sort();
+
+    for texture_name in texture_names {
+        let (rgba_data, width, height) = &model.textures[texture_name];
         log.push(format!(
             "Embedding texture: {} ({}x{})",
             texture_name, width, height
@@ -445,48 +450,42 @@ fn build_glb_bytes(
         texture_name_to_index.insert(texture_name.clone(), texture_index);
     }
 
-    let base_color_texture = model
-        .textures
-        .keys()
-        .next()
-        .and_then(|name| texture_name_to_index.get(name).copied());
-    let base_color_factor = if model.textures.is_empty() {
-        [0.8, 0.8, 0.8, 1.0]
-    } else {
-        [1.0, 1.0, 1.0, 1.0]
-    };
-    materials.push(json::Material {
-        name: Some("DefaultMaterial".to_string()),
-        pbr_metallic_roughness: json::material::PbrMetallicRoughness {
-            base_color_factor: json::material::PbrBaseColorFactor(base_color_factor),
-            base_color_texture: base_color_texture.map(|index| json::texture::Info {
-                index: json::Index::new(index),
-                tex_coord: 0,
-                extensions: None,
-                extras: Default::default(),
-            }),
-            metallic_factor: json::material::StrengthFactor(0.0),
-            roughness_factor: json::material::StrengthFactor(0.5),
-            metallic_roughness_texture: None,
-            extensions: None,
-            extras: Default::default(),
-        },
-        alpha_mode: json::validation::Checked::Valid(json::material::AlphaMode::Opaque),
-        alpha_cutoff: None,
-        double_sided: false,
-        normal_texture: None,
-        occlusion_texture: None,
-        emissive_texture: None,
-        emissive_factor: json::material::EmissiveFactor([0.0, 0.0, 0.0]),
-        extensions: None,
-        extras: Default::default(),
-    });
-    let default_material_index = Some(0u32);
+    fn collect_mesh_materials(node: &PrefabNode, map: &mut HashMap<String, Material>) {
+        if let Some(ref render_mesh) = node.components.render_mesh
+            && let Some(ref material) = node.components.material
+        {
+            map.insert(render_mesh.name.clone(), material.clone());
+        }
+        for child in &node.children {
+            collect_mesh_materials(child, map);
+        }
+    }
+
+    let mut mesh_materials: HashMap<String, Material> = HashMap::new();
+    for root_node in &model.prefab.root_nodes {
+        collect_mesh_materials(root_node, &mut mesh_materials);
+    }
+
+    fn find_texture_by_keywords(
+        texture_name_to_index: &HashMap<String, u32>,
+        keywords: &[&str],
+    ) -> Option<u32> {
+        let mut matches: Vec<(&String, u32)> = texture_name_to_index
+            .iter()
+            .filter(|(name, _)| {
+                let lower = name.to_lowercase();
+                keywords.iter().any(|keyword| lower.contains(keyword))
+            })
+            .map(|(name, index)| (name, *index))
+            .collect();
+        matches.sort();
+        matches.first().map(|(_, index)| *index)
+    }
 
     log.push(format!(
-        "Created {} textures and {} materials",
+        "Created {} textures, found {} mesh materials",
         gltf_textures.len(),
-        materials.len()
+        mesh_materials.len()
     ));
 
     for (skin_index, skin) in model.skins.iter().enumerate() {
@@ -575,7 +574,11 @@ fn build_glb_bytes(
         });
     }
 
-    for (mesh_name, mesh) in &model.meshes {
+    let mut mesh_names: Vec<&String> = model.meshes.keys().collect();
+    mesh_names.sort();
+
+    for mesh_name in mesh_names {
+        let mesh = &model.meshes[mesh_name];
         let (vertices_to_use, skinned_data) = if let Some(ref skin_data) = mesh.skin_data {
             (None, Some(skin_data))
         } else {
@@ -912,11 +915,102 @@ fn build_glb_bytes(
             );
         }
 
+        let mesh_material = mesh_materials.get(mesh_name);
+        let base_texture_index = mesh_material
+            .and_then(|material| material.base_texture.as_ref())
+            .and_then(|name| texture_name_to_index.get(name).copied())
+            .or_else(|| {
+                find_texture_by_keywords(
+                    &texture_name_to_index,
+                    &["diffuse", "albedo", "basecolor", "base_color"],
+                )
+            });
+        let normal_texture_index = mesh_material
+            .and_then(|material| material.normal_texture.as_ref())
+            .and_then(|name| texture_name_to_index.get(name).copied())
+            .or_else(|| find_texture_by_keywords(&texture_name_to_index, &["normal"]));
+        let emissive_texture_index = mesh_material
+            .and_then(|material| material.emissive_texture.as_ref())
+            .and_then(|name| texture_name_to_index.get(name).copied());
+        let metallic_roughness_texture_index = mesh_material
+            .and_then(|material| material.metallic_roughness_texture.as_ref())
+            .and_then(|name| texture_name_to_index.get(name).copied());
+
+        let base_color_factor = if base_texture_index.is_some() {
+            [1.0, 1.0, 1.0, 1.0]
+        } else {
+            mesh_material
+                .map(|material| material.base_color)
+                .unwrap_or([0.8, 0.8, 0.8, 1.0])
+        };
+        let roughness = mesh_material
+            .map(|material| material.roughness)
+            .unwrap_or(0.5)
+            .clamp(0.0, 1.0);
+        let metallic = mesh_material
+            .map(|material| material.metallic)
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0);
+        let emissive_factor = mesh_material
+            .map(|material| material.emissive_factor)
+            .unwrap_or([0.0, 0.0, 0.0]);
+
+        log.push(format!(
+            "  Material: base texture {:?}, normal texture {:?}, roughness {:.2}, metallic {:.2}",
+            base_texture_index, normal_texture_index, roughness, metallic
+        ));
+
+        let material_index = materials.len() as u32;
+        materials.push(json::Material {
+            name: Some(format!("{mesh_name}_material")),
+            pbr_metallic_roughness: json::material::PbrMetallicRoughness {
+                base_color_factor: json::material::PbrBaseColorFactor(base_color_factor),
+                base_color_texture: base_texture_index.map(|index| json::texture::Info {
+                    index: json::Index::new(index),
+                    tex_coord: 0,
+                    extensions: None,
+                    extras: Default::default(),
+                }),
+                metallic_factor: json::material::StrengthFactor(metallic),
+                roughness_factor: json::material::StrengthFactor(roughness),
+                metallic_roughness_texture: metallic_roughness_texture_index.map(|index| {
+                    json::texture::Info {
+                        index: json::Index::new(index),
+                        tex_coord: 0,
+                        extensions: None,
+                        extras: Default::default(),
+                    }
+                }),
+                extensions: None,
+                extras: Default::default(),
+            },
+            alpha_mode: json::validation::Checked::Valid(json::material::AlphaMode::Opaque),
+            alpha_cutoff: None,
+            double_sided: false,
+            normal_texture: normal_texture_index.map(|index| json::material::NormalTexture {
+                index: json::Index::new(index),
+                scale: 1.0,
+                tex_coord: 0,
+                extensions: None,
+                extras: Default::default(),
+            }),
+            occlusion_texture: None,
+            emissive_texture: emissive_texture_index.map(|index| json::texture::Info {
+                index: json::Index::new(index),
+                tex_coord: 0,
+                extensions: None,
+                extras: Default::default(),
+            }),
+            emissive_factor: json::material::EmissiveFactor(emissive_factor),
+            extensions: None,
+            extras: Default::default(),
+        });
+
         meshes.push(json::Mesh {
             primitives: vec![json::mesh::Primitive {
                 attributes,
                 indices: Some(json::Index::new(indices_accessor_index)),
-                material: default_material_index.map(json::Index::new),
+                material: Some(json::Index::new(material_index)),
                 mode: json::validation::Checked::Valid(json::mesh::Mode::Triangles),
                 targets: None,
                 extensions: None,
