@@ -1,5 +1,7 @@
 # mixamo-to-gltf
 
+![The converter previewing a Mixamo character with its animation list](images/screenshot.png)
+
 Convert [Mixamo](https://www.mixamo.com) character + animation bundles into a single GLB, with a live [Nightshade](https://github.com/matthewjberger/nightshade) viewer to verify the result before saving. The engine runs inside a web worker against an OffscreenCanvas and renders through WebGPU off the main thread. A [Leptos](https://leptos.dev) UI drives it from the main thread, and a native webview shell turns the same bundle into a desktop app and hosts the native conversion pipeline.
 
 ## Usage
